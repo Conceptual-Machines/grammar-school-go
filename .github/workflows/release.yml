@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on semantic version tags like v1.0.0, v0.2.1, etc.
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git tags
+
+      - name: Extract version from tag
+        id: tag_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Tag version: $VERSION"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Update Go version
+        run: |
+          VERSION="${{ steps.tag_version.outputs.version }}"
+          # Update version.go
+          sed -i "s/const Version = \".*\"/const Version = \"$VERSION\"/" gs/version.go || true
+          sed -i "s/Version: \".*\",/Version: \"$VERSION\",/" gs/version.go || true
+
+      - name: Test Go package
+        run: go test ./...
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
+
+      - name: Commit version updates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add gs/version.go || exit 0
+          git commit -m "chore: bump version to ${{ steps.tag_version.outputs.version }}" || exit 0
+          git push || exit 0
+
