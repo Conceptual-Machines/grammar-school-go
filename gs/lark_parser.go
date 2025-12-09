@@ -31,22 +31,63 @@ func (p *LarkParser) Parse(input string) (*CallChain, error) {
 	return chain, nil
 }
 
-// splitMethodCalls splits "track(...).method(...)" into ["track(...)", "method(...)"]
+// splitMethodCalls splits statements into separate calls.
+// Handles both method chaining (track(...).method(...)) and concatenated statements (track(...)track(...))
 func splitMethodCalls(input string) []string {
 	var parts []string
 	var current strings.Builder
 	depth := 0
+	inString := false
+	escapeNext := false
 
-	for _, r := range input {
+	// Statement starters that indicate a new statement (not a method chain)
+	statementStarters := []string{"track(", "filter(", "map(", "for_each(", "undo("}
+
+	for i, r := range input {
 		char := string(r)
 
-		if char == "(" {
+		if escapeNext {
+			current.WriteRune(r)
+			escapeNext = false
+			continue
+		}
+
+		if char == "\\" {
+			escapeNext = true
+			current.WriteRune(r)
+			continue
+		}
+
+		if char == "\"" {
+			inString = !inString
+			current.WriteRune(r)
+		} else if char == "(" {
 			depth++
 			current.WriteRune(r)
 		} else if char == ")" {
 			depth--
 			current.WriteRune(r)
-		} else if char == "." && depth == 0 {
+			
+			// Check if this closing paren ends a statement and next token is a statement starter
+			if depth == 0 && !inString {
+				// Look ahead to see if next token is a statement starter
+				remaining := input[i+1:]
+				remaining = strings.TrimSpace(remaining)
+				
+				// Check if remaining starts with a statement starter
+				for _, starter := range statementStarters {
+					if strings.HasPrefix(remaining, starter) {
+						// This is a statement boundary - split here
+						if current.Len() > 0 {
+							parts = append(parts, strings.TrimSpace(current.String()))
+							current.Reset()
+						}
+						break
+					}
+				}
+			}
+		} else if char == "." && depth == 0 && !inString {
+			// Method chaining separator
 			if current.Len() > 0 {
 				parts = append(parts, strings.TrimSpace(current.String()))
 				current.Reset()
