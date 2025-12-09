@@ -220,10 +220,37 @@ func capitalizeMethodName(name string) string {
 func parseValue(valueStr string) Value {
 	valueStr = strings.TrimSpace(valueStr)
 
-	if strings.HasPrefix(valueStr, "\"") && strings.HasSuffix(valueStr, "\"") {
-		return Value{
-			Kind: ValueString,
-			Str:  valueStr[1 : len(valueStr)-1],
+	// Check for properly quoted string (must start and end with quotes, and quotes must match)
+	if strings.HasPrefix(valueStr, "\"") {
+		// Find the matching closing quote (not escaped)
+		quoteEnd := -1
+		escapeNext := false
+		for i := 1; i < len(valueStr); i++ {
+			if escapeNext {
+				escapeNext = false
+				continue
+			}
+			if valueStr[i] == '\\' {
+				escapeNext = true
+				continue
+			}
+			if valueStr[i] == '"' {
+				quoteEnd = i
+				break
+			}
+		}
+		
+		// Only treat as string if we found a matching closing quote and it's at the end
+		if quoteEnd > 0 && quoteEnd == len(valueStr)-1 {
+			// Extract the string content, handling escape sequences
+			content := valueStr[1:quoteEnd]
+			// Simple unescape (handle common cases)
+			content = strings.ReplaceAll(content, "\\\"", "\"")
+			content = strings.ReplaceAll(content, "\\\\", "\\")
+			return Value{
+				Kind: ValueString,
+				Str:  content,
+			}
 		}
 	}
 
