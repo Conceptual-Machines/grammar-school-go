@@ -86,6 +86,13 @@ func splitMethodCalls(input string) []string {
 					}
 				}
 			}
+		} else if char == ";" && depth == 0 && !inString {
+			// Statement separator (semicolon)
+			if current.Len() > 0 {
+				parts = append(parts, strings.TrimSpace(current.String()))
+				current.Reset()
+			}
+			// Skip the semicolon itself
 		} else if char == "." && depth == 0 && !inString {
 			// Method chaining separator
 			if current.Len() > 0 {
